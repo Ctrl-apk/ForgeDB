@@ -29,11 +29,17 @@ import java.util.List;
  * per database file. A catalog table will be added in a later milestone to
  * track multiple tables.
  *
- * Insert strategy
- * ---------------
- * Linear scan through known pages looking for one where canFit() returns
- * true. If no existing page has room, allocate a new one. This is O(pages)
- * but simple and correct. The buffer pool in Milestone 3 will make it fast.
+ * Pin discipline (buffer pool compatibility)
+ * ------------------------------------------
+ * HeapFile works with either a plain DiskManagerImpl or a BufferPool
+ * (which implements DiskManager). A BufferPool pins every page returned
+ * by readPage(); a plain DiskManager does not. HeapFile therefore calls
+ * unpinPage() on its disk manager whenever it is done with a page —
+ * this is a no-op on DiskManagerImpl and a pin-count decrement on
+ * BufferPool. Every use site wraps the acquire-use-release sequence in
+ * try/finally so that exceptions can never leave a page permanently
+ * pinned. Leaked pins would eventually exhaust the buffer pool
+ * ("all frames are pinned") during long scans.
  *
  * Deleted records
  * ---------------
@@ -57,6 +63,13 @@ public class HeapFile {
     private final Schema      schema;
 
     /**
+     * True when the DiskManager given to us is actually a BufferPool whose
+     * readPage() pins every page it returns. We must then call unpinPage()
+     * after each use; on a plain DiskManager the call is a harmless no-op.
+     */
+    private final boolean pooled;
+
+    /**
      * PageIds of all DATA pages belonging to this heap, in insertion order.
      * Page 0 (the DiskManager header) is never included.
      */
@@ -77,8 +90,11 @@ public class HeapFile {
      * @param schema      the schema of the table stored in this heap
      */
     public HeapFile(DiskManager diskManager, Schema schema) {
+        if (diskManager == null) throw new NullPointerException("diskManager must not be null");
+        if (schema == null)      throw new NullPointerException("schema must not be null");
         this.diskManager = diskManager;
         this.schema      = schema;
+        this.pooled      = diskManager instanceof BufferPool;
         this.dataPages   = new ArrayList<>();
 
         // Rebuild the in-memory page list from the DiskManager's page count.
@@ -109,22 +125,30 @@ public class HeapFile {
 
         // Find a page with enough free space
         for (PageId pageId : dataPages) {
-            Page page = diskManager.readPage(pageId);
-            DataPage dp = new DataPage(page);
-            if (dp.canFit(record.length)) {
-                int slotIndex = dp.insertRecord(record);
-                diskManager.writePage(pageId, page);
-                return new RecordId(pageId, slotIndex);
+            Page page = acquirePage(pageId);
+            try {
+                DataPage dp = new DataPage(page);
+                if (dp.canFit(record.length)) {
+                    int slotIndex = dp.insertRecord(record);
+                    diskManager.writePage(pageId, page);
+                    return new RecordId(pageId, slotIndex);
+                }
+            } finally {
+                releasePage(pageId);
             }
         }
 
         // No existing page has room — allocate a new one
         PageId newPageId = allocateNewDataPage();
-        Page page = diskManager.readPage(newPageId);
-        DataPage dp = new DataPage(page);
-        int slotIndex = dp.insertRecord(record);
-        diskManager.writePage(newPageId, page);
-        return new RecordId(newPageId, slotIndex);
+        Page page = acquirePage(newPageId);
+        try {
+            DataPage dp = new DataPage(page);
+            int slotIndex = dp.insertRecord(record);
+            diskManager.writePage(newPageId, page);
+            return new RecordId(newPageId, slotIndex);
+        } finally {
+            releasePage(newPageId);
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -140,10 +164,14 @@ public class HeapFile {
      *         range, or an I/O error occurs
      */
     public Tuple read(RecordId rid) throws ForgeDBException {
-        Page page     = diskManager.readPage(rid.pageId());
-        DataPage dp   = new DataPage(page);
-        byte[] record = dp.readRecord(rid.slotIndex());
-        return TupleSerializer.deserialize(schema, record, 0, record.length);
+        Page page = acquirePage(rid.pageId());
+        try {
+            DataPage dp   = new DataPage(page);
+            byte[] record = dp.readRecord(rid.slotIndex());
+            return TupleSerializer.deserialize(schema, record, 0, record.length);
+        } finally {
+            releasePage(rid.pageId());
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -162,10 +190,14 @@ public class HeapFile {
      *         or an I/O error occurs
      */
     public void delete(RecordId rid) throws ForgeDBException {
-        Page page   = diskManager.readPage(rid.pageId());
-        DataPage dp = new DataPage(page);
-        dp.deleteRecord(rid.slotIndex());
-        diskManager.writePage(rid.pageId(), page);
+        Page page = acquirePage(rid.pageId());
+        try {
+            DataPage dp = new DataPage(page);
+            dp.deleteRecord(rid.slotIndex());
+            diskManager.writePage(rid.pageId(), page);
+        } finally {
+            releasePage(rid.pageId());
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -209,17 +241,21 @@ public class HeapFile {
         List<Tuple> results = new ArrayList<>();
 
         for (PageId pageId : dataPages) {
-            Page page     = diskManager.readPage(pageId);
-            DataPage dp   = new DataPage(page);
-            int slotCount = dp.getSlotCount();
+            Page page = acquirePage(pageId);
+            try {
+                DataPage dp   = new DataPage(page);
+                int slotCount = dp.getSlotCount();
 
-            for (int slot = 0; slot < slotCount; slot++) {
-                if (!dp.isDeleted(slot)) {
-                    byte[] record = dp.readRecord(slot);
-                    Tuple tuple   = TupleSerializer.deserialize(
-                                        schema, record, 0, record.length);
-                    results.add(tuple);
+                for (int slot = 0; slot < slotCount; slot++) {
+                    if (!dp.isDeleted(slot)) {
+                        byte[] record = dp.readRecord(slot);
+                        Tuple tuple   = TupleSerializer.deserialize(
+                                            schema, record, 0, record.length);
+                        results.add(tuple);
+                    }
                 }
+            } finally {
+                releasePage(pageId);
             }
         }
 
@@ -252,10 +288,37 @@ public class HeapFile {
      */
     private PageId allocateNewDataPage() throws ForgeDBException {
         PageId newPageId = diskManager.allocatePage();
-        Page page = diskManager.readPage(newPageId);
-        DataPage.init(page);                       // write slot directory header
-        diskManager.writePage(newPageId, page);    // persist the initialised page
+        Page page = acquirePage(newPageId);
+        try {
+            DataPage.init(page);                       // write slot directory header
+            diskManager.writePage(newPageId, page);    // persist the initialised page
+        } finally {
+            releasePage(newPageId);
+        }
         dataPages.add(newPageId);
         return newPageId;
+    }
+
+    // -------------------------------------------------------------------------
+    // Pin management (buffer pool compatibility)
+    // -------------------------------------------------------------------------
+
+    /**
+     * Acquires a page for use, whether our DiskManager is a pin-tracking
+     * BufferPool or a plain file-backed DiskManager.
+     *
+     * Every acquirePage() must be paired with exactly one releasePage() —
+     * callers use try/finally so exceptions cannot leak pins.
+     */
+    private Page acquirePage(PageId pageId) throws ForgeDBException {
+        return diskManager.readPage(pageId);   // pins on BufferPool
+    }
+
+    /**
+     * Releases a page acquired with acquirePage(). No-op on a plain
+     * DiskManager; decrements the pin count on a BufferPool.
+     */
+    private void releasePage(PageId pageId) throws ForgeDBException {
+        diskManager.unpinPage(pageId);         // no-op on plain DiskManager
     }
 }

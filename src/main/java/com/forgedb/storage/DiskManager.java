@@ -32,6 +32,28 @@ import com.forgedb.common.ForgeDBException;
 public interface DiskManager extends AutoCloseable {
 
     /**
+     * Releases a previously acquired page. Calling this on a plain
+     * {@code DiskManager} is a no-op: only caching implementations that
+     * track pin counts (e.g. {@link BufferPool}) have work to do.
+     *
+     * <p>This exists so that code written against a {@code DiskManager}
+     * (e.g. {@code HeapFile}) can maintain the pin/unpin protocol of a
+     * {@code BufferPool} that was supplied in its place, without needing
+     * instanceof checks or a direct dependency on the buffer pool.
+     *
+     * <p>Implementations must be idempotent-safe in the sense that callers
+     * unpin exactly once per acquired page, as documented at each call site.
+     *
+     * @param pageId the page to release
+     * @throws ForgeDBException if a caching implementation does not hold the
+     *         page, or it is already fully unpinned (programming error)
+     */
+    default void unpinPage(PageId pageId) throws ForgeDBException {
+        // No-op on non-caching implementations: a plain DiskManager does not
+        // track pins, so there is nothing to release.
+    }
+
+    /**
      * Reads the page identified by {@code pageId} from disk into a new Page
      * object. The returned page has its dirty flag cleared.
      *

@@ -280,6 +280,25 @@ public class BufferPool implements DiskManager {
     // -------------------------------------------------------------------------
 
     /**
+     * Releases a page previously acquired through {@link #readPage}.
+     *
+     * This is the {@link DiskManager} interface method: it allows code written
+     * against a plain {@code DiskManager} (e.g. {@link HeapFile}) to maintain
+     * the pin/unpin protocol even when the "DiskManager" it holds is actually
+     * a caching {@code BufferPool}. {@code BufferPool implements DiskManager},
+     * so callers can call {@code unpinPage} unconditionally after operations
+     * that may have pinned pages internally.
+     *
+     * @param pageId the page to release
+     * @throws ForgeDBException if the page is not in the pool or is already
+     *         fully unpinned (programming error)
+     */
+    @Override
+    public void unpinPage(PageId pageId) throws ForgeDBException {
+        unpin(pageId);
+    }
+
+    /**
      * Decrements the pin count of the page identified by {@code pageId}.
      *
      * Once the pin count reaches 0 the page becomes eligible for eviction.
@@ -323,6 +342,58 @@ public class BufferPool implements DiskManager {
             diskManager.writePage(frame.pageId, frame.page);
             // writePage clears the dirty flag on success
         }
+    }
+
+    /**
+     * Removes a page from the buffer pool <strong>without flushing it</strong>,
+     * leaving the on-disk copy (last persisted state) as the authoritative
+     * version.
+     *
+     * <h2>Semantics</h2>
+     * <ul>
+     *   <li>The frame is removed from both the page table and the LRU order.</li>
+     *   <li>The page's dirty flag is irrelevant: dirty or clean, its content
+     *       is dropped, never written. This is intentional — rollback (M9) will
+     *       use discard to abandon uncommitted in-memory changes.</li>
+     *   <li>The page must not be pinned. A pinned page has an active holder who
+     *       expects its content to survive; discarding it would be a
+     *       programming error, so this fails loudly.</li>
+     *   <li>Discarding a page that is not currently in the pool is also an
+     *       error: callers can only discard pages they acquired earlier.</li>
+     * </ul>
+     *
+     * <p>This is deliberately not part of the {@link DiskManager} interface:
+     * a non-caching {@code DiskManagerImpl} has nothing to discard — its only
+     * copy IS the disk copy. Discard is an exclusive property of a cache that
+     * can hold newer, unpersisted content than the disk.</p>
+     *
+     * <h2>Why the method exists (M9)</h2>
+     * Phase 0 only guarantees the primitive. It is deliberately NOT wired into
+     * any execution path yet: adding it now would mean inventing a transaction
+     * lifecycle before the transaction manager exists. The no-steal rollback
+     * design will call this method to drop a transaction's dirty pages without
+     * persisting them.
+     *
+     * @param pageId the page to discard
+     * @throws ForgeDBException if the page is not in the pool, or its pin
+     *         count is greater than zero (pinned pages cannot be discarded)
+     */
+    public void discardPage(PageId pageId) throws ForgeDBException {
+        Frame frame = pageTable.get(pageId);
+        if (frame == null) {
+            throw new ForgeDBException(
+                "Cannot discard " + pageId + ": page is not in the buffer pool");
+        }
+        if (frame.pinCount > 0) {
+            throw new ForgeDBException(String.format(
+                "Cannot discard %s: pin count is %d (pinned pages cannot be discarded)",
+                pageId, frame.pinCount));
+        }
+        // Remove from both structures. LinkedHashMap#remove keeps the access-
+        // order invariant intact for the remaining entries, so the LRU scan in
+        // evict() is unaffected. The dirty page is intentionally NOT written.
+        pageTable.remove(pageId);
+        lruOrder.remove(pageId);
     }
 
     /**

@@ -782,39 +782,46 @@ public final class Executor implements StatementVisitor<QueryResult>, AutoClosea
         // Page 0 is the DB-level header. Pages 1..N-1 are data.
         // The heap only knows its own pages, but since we use one DB file per
         // table in M6, all data pages belong to this heap.
+        //
+        // Pin protocol: every page read here is pinned by bufferPool.readPage
+        // and MUST be unpinned exactly once. The try/finally guarantees that
+        // even a DataPage or ExpressionEvaluator exception cannot leave the
+        // page pinned (a leaked pin would eventually exhaust the pool).
         for (int pageNum = 1; pageNum < totalPages; pageNum++) {
             PageId pageId = new PageId(pageNum);
             Page   page   = bufferPool.readPage(pageId);
 
-            // Only process DATA pages (skip BTREE meta/node pages)
-            if (page.getPageType() != PageType.DATA) {
-                bufferPool.unpin(pageId);
-                continue;
-            }
+            try {
+                // Only process DATA pages (skip BTREE meta/node pages)
+                if (page.getPageType() != PageType.DATA) {
+                    continue;
+                }
 
-            DataPage dp       = new DataPage(page);
-            int      slotCount = dp.getSlotCount();
+                DataPage dp       = new DataPage(page);
+                int      slotCount = dp.getSlotCount();
 
-            for (int slot = 0; slot < slotCount; slot++) {
-                if (dp.isDeleted(slot)) continue;
-                byte[] record = dp.readRecord(slot);
-                Tuple  tuple  = TupleSerializer.deserialize(
-                                    schema, record, 0, record.length);
-                RecordId rid  = new RecordId(pageId, slot);
+                for (int slot = 0; slot < slotCount; slot++) {
+                    if (dp.isDeleted(slot)) continue;
+                    byte[] record = dp.readRecord(slot);
+                    Tuple  tuple  = TupleSerializer.deserialize(
+                                        schema, record, 0, record.length);
+                    RecordId rid  = new RecordId(pageId, slot);
 
-                if (whereClause == null) {
-                    rids.add(rid);
-                    tuples.add(tuple);
-                } else {
-                    ExpressionEvaluator eval =
-                        new ExpressionEvaluator(schema, tuple);
-                    if (eval.evaluateBoolean(whereClause)) {
+                    if (whereClause == null) {
                         rids.add(rid);
                         tuples.add(tuple);
+                    } else {
+                        ExpressionEvaluator eval =
+                            new ExpressionEvaluator(schema, tuple);
+                        if (eval.evaluateBoolean(whereClause)) {
+                            rids.add(rid);
+                            tuples.add(tuple);
+                        }
                     }
                 }
+            } finally {
+                bufferPool.unpin(pageId);
             }
-            bufferPool.unpin(pageId);
         }
     }
 
