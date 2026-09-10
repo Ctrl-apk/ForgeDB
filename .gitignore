@@ -1,0 +1,25 @@
+# Maven build output
+target/
+
+# Local build / test run logs (not project artifacts)
+*.txt
+!docs/**/*.txt
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.settings/
+.classpath
+.project
+
+# ForgeDB runtime artifacts
+*.fdb
+*.wal
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Tool state
+.freebuff/
