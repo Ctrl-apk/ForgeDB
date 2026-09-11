@@ -600,6 +600,29 @@ public final class Executor implements StatementVisitor<QueryResult>, AutoClosea
             "EXPLAIN only supports SELECT, DELETE, and UPDATE");
     }
 
+    // -------------------------------------------------------------------------
+    // StatementVisitor — BEGIN / COMMIT / ROLLBACK (M9)
+    // -------------------------------------------------------------------------
+
+    @Override
+    public QueryResult visitBegin(BeginStatement stmt) {
+        // BEGIN is handled by the caller via the TransactionManager
+        // The Executor doesn't manage transactions yet.
+        return QueryResult.ofUpdate("BEGIN (transaction manager required)", 0);
+    }
+
+    @Override
+    public QueryResult visitCommit(CommitStatement stmt) {
+        // COMMIT is handled by the caller via the TransactionManager
+        return QueryResult.ofUpdate("COMMIT (transaction manager required)", 0);
+    }
+
+    @Override
+    public QueryResult visitRollback(RollbackStatement stmt) {
+        // ROLLBACK is handled by the caller via the TransactionManager
+        return QueryResult.ofUpdate("ROLLBACK (transaction manager required)", 0);
+    }
+
     /** Builds a QueryPlan for any statement operating on tableName. */
     private QueryPlan planFor(String tableName, Expression whereClause,
                                List<SelectItem> selectList)

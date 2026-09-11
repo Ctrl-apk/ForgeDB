@@ -50,33 +50,36 @@ public final class Lexer {
     private static final Map<String, TokenType> KEYWORDS = new HashMap<>();
 
     static {
-        KEYWORDS.put("and",     TokenType.AND);
-        KEYWORDS.put("as",      TokenType.AS);
-        KEYWORDS.put("boolean", TokenType.BOOLEAN);
-        KEYWORDS.put("by",      TokenType.BY);
-        KEYWORDS.put("create",  TokenType.CREATE);
-        KEYWORDS.put("delete",  TokenType.DELETE);
-        KEYWORDS.put("double",  TokenType.DOUBLE);
-        KEYWORDS.put("drop",    TokenType.DROP);
-        KEYWORDS.put("false",   TokenType.FALSE);
-        KEYWORDS.put("from",    TokenType.FROM);
-        KEYWORDS.put("insert",  TokenType.INSERT);
-        KEYWORDS.put("int",     TokenType.INT);
-        KEYWORDS.put("into",    TokenType.INTO);
-        KEYWORDS.put("is",      TokenType.IS);
-        KEYWORDS.put("long",    TokenType.LONG);
-        KEYWORDS.put("not",     TokenType.NOT);
-        KEYWORDS.put("null",    TokenType.NULL);
-        KEYWORDS.put("or",      TokenType.OR);
-        KEYWORDS.put("order",   TokenType.ORDER);
-        KEYWORDS.put("select",  TokenType.SELECT);
-        KEYWORDS.put("set",     TokenType.SET);
-        KEYWORDS.put("table",   TokenType.TABLE);
-        KEYWORDS.put("text",    TokenType.TEXT);
-        KEYWORDS.put("true",    TokenType.TRUE);
-        KEYWORDS.put("update",  TokenType.UPDATE);
-        KEYWORDS.put("values",  TokenType.VALUES);
-        KEYWORDS.put("where",   TokenType.WHERE);
+        KEYWORDS.put("and",      TokenType.AND);
+        KEYWORDS.put("as",       TokenType.AS);
+        KEYWORDS.put("begin",    TokenType.BEGIN);
+        KEYWORDS.put("boolean",  TokenType.BOOLEAN);
+        KEYWORDS.put("by",       TokenType.BY);
+        KEYWORDS.put("commit",   TokenType.COMMIT);
+        KEYWORDS.put("create",   TokenType.CREATE);
+        KEYWORDS.put("delete",   TokenType.DELETE);
+        KEYWORDS.put("double",   TokenType.DOUBLE);
+        KEYWORDS.put("drop",     TokenType.DROP);
+        KEYWORDS.put("false",    TokenType.FALSE);
+        KEYWORDS.put("from",     TokenType.FROM);
+        KEYWORDS.put("insert",   TokenType.INSERT);
+        KEYWORDS.put("int",      TokenType.INT);
+        KEYWORDS.put("into",     TokenType.INTO);
+        KEYWORDS.put("is",       TokenType.IS);
+        KEYWORDS.put("long",     TokenType.LONG);
+        KEYWORDS.put("not",      TokenType.NOT);
+        KEYWORDS.put("null",     TokenType.NULL);
+        KEYWORDS.put("or",       TokenType.OR);
+        KEYWORDS.put("order",    TokenType.ORDER);
+        KEYWORDS.put("rollback", TokenType.ROLLBACK);
+        KEYWORDS.put("select",   TokenType.SELECT);
+        KEYWORDS.put("set",      TokenType.SET);
+        KEYWORDS.put("table",    TokenType.TABLE);
+        KEYWORDS.put("text",     TokenType.TEXT);
+        KEYWORDS.put("true",     TokenType.TRUE);
+        KEYWORDS.put("update",   TokenType.UPDATE);
+        KEYWORDS.put("values",   TokenType.VALUES);
+        KEYWORDS.put("where",    TokenType.WHERE);
     }
 
     // -------------------------------------------------------------------------

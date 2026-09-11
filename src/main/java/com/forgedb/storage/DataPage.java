@@ -172,6 +172,53 @@ public final class DataPage {
     }
 
     /**
+     * Inserts a record at the specific slot index, extending the slot directory
+     * if necessary. Used during WAL redo to restore a record at a precise slot.
+     *
+     * This method:
+     *   - Extends the slot directory to accommodate slotIndex if needed
+     *   - Writes the record at the top of the record region
+     *   - Places the slot entry at the correct position
+     *
+     * @param slotIndex the slot index to use (extends directory if beyond current count)
+     * @param record    the record bytes to insert
+     * @throws ForgeDBException if the record doesn't fit
+     */
+    public void insertRecordAt(int slotIndex, byte[] record) throws ForgeDBException {
+        if (record == null || record.length == 0) {
+            throw new ForgeDBException("Cannot insert null or zero-length record");
+        }
+        if (!canFit(record.length)) {
+            throw new ForgeDBException(String.format(
+                "Record of %d bytes does not fit in page (free space: %d bytes)",
+                record.length, getFreeSpace() - SLOT_ENTRY_SIZE));
+        }
+
+        int currentCount = getSlotCount();
+        int neededCount = slotIndex + 1;
+
+        // Extend slot directory if needed
+        if (neededCount > currentCount) {
+            for (int i = currentCount; i < neededCount; i++) {
+                // Insert placeholder (deleted) entries to grow the directory
+                int newEndOfRecords = getEndOfRecords() - 0; // zero-length placeholder
+                int slotOffset = DIR_HEADER_SIZE + i * SLOT_ENTRY_SIZE;
+                setSlotEntry(slotOffset, DELETED_SENTINEL, 0);
+                setFreeSpacePtr(getFreeSpacePtr() + SLOT_ENTRY_SIZE);
+                // endOfRecords stays unchanged for placeholders
+            }
+        }
+
+        // Now insert at the target slot
+        int newEndOfRecords = getEndOfRecords() - record.length;
+        page.putBytes(newEndOfRecords, record, 0, record.length);
+
+        int slotOffset = DIR_HEADER_SIZE + slotIndex * SLOT_ENTRY_SIZE;
+        setSlotEntry(slotOffset, newEndOfRecords, record.length);
+        setEndOfRecords(newEndOfRecords);
+    }
+
+    /**
      * Reads and returns the raw bytes of the record at the given slot index.
      *
      * @param slotIndex zero-based slot index

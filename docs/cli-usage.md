@@ -84,25 +84,47 @@ DELETE FROM users WHERE id = 1;
 
 ## EXPLAIN
 
-Prefix any SELECT, DELETE, or UPDATE with `EXPLAIN` to see the query plan without executing it:
+Prefix any SELECT, DELETE, or UPDATE with `EXPLAIN` to see the query plan without executing it.
+
+**Without an index** (default for any freshly created table):
 
 ```
-ForgeDB> EXPLAIN SELECT * FROM users WHERE id = 42;
-SeqScan [ table=users, filter=(id = 42) ]
+ForgeDB> EXPLAIN SELECT * FROM users WHERE id = 1;
+SeqScan [ table=users, filter=(id EQ 1) ]
 ```
 
-After creating an index:
+**After calling `exec.createIndex("users")` programmatically** (or once M9 adds `CREATE INDEX` SQL):
 
 ```
-ForgeDB> EXPLAIN SELECT * FROM users WHERE id = 42;
-IndexLookup [ table=users, index=id, op=EQ, key=42, residual=none ]
+ForgeDB> EXPLAIN SELECT * FROM users WHERE id = 1;
+IndexLookup [ table=users, index=id, op=EQ, key=1, residual=none ]
 ```
 
 With an AND residual predicate:
 
 ```
 ForgeDB> EXPLAIN SELECT * FROM users WHERE id = 5 AND age > 18;
-IndexLookup [ table=users, index=id, op=EQ, key=5, residual=(age > 18) ]
+IndexLookup [ table=users, index=id, op=EQ, key=5, residual=(age GT 18) ]
+```
+
+## Index lifecycle (important)
+
+Indexes are **not created automatically** and are **not persistent** across sessions in M1-M8.
+
+- There is no SQL `CREATE INDEX` syntax yet (planned for M9).
+- The only way to register an index is via `Executor.createIndex(tableName)` in Java code.
+- When you close an `Executor` and reopen it, all indexes are gone — the in-memory map is empty.
+- This is why `EXPLAIN` always shows `SeqScan` in a fresh CLI session.
+
+**In M9**, `CREATE INDEX id ON users` will be added as SQL, and indexes will be persisted.
+
+Until then, to exercise index-backed queries you must call `createIndex` programmatically:
+
+```java
+Executor exec = new Executor(bufferPool);
+exec.execute("CREATE TABLE users (id INT, name TEXT)");
+// ... inserts ...
+exec.createIndex("users");   // now EXPLAIN will show IndexLookup
 ```
 
 ## When the planner chooses INDEX_LOOKUP vs SEQ_SCAN

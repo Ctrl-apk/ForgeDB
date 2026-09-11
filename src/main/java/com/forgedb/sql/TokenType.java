@@ -18,8 +18,10 @@ public enum TokenType {
     // -------------------------------------------------------------------------
     AND,
     AS,
+    BEGIN,      // transaction
     BOOLEAN,    // type keyword
     BY,
+    COMMIT,     // transaction
     CREATE,
     DELETE,
     DOUBLE,     // type keyword
@@ -35,6 +37,7 @@ public enum TokenType {
     NULL,
     OR,
     ORDER,
+    ROLLBACK,   // transaction
     SELECT,
     SET,
     TABLE,

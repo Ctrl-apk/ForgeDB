@@ -6,6 +6,9 @@ import com.forgedb.sql.ast.*;
 import java.util.ArrayList;
 import java.util.List;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * Recursive-descent parser for the ForgeDB SQL subset.
  *
@@ -115,14 +118,17 @@ public final class Parser {
     private Statement parseStatement() throws SqlException {
         Token t = peek();
         return switch (t.type()) {
-            case CREATE -> parseCreateTable();
-            case INSERT -> parseInsert();
-            case SELECT -> parseSelect();
-            case DELETE -> parseDelete();
-            case UPDATE -> parseUpdate();
-            default     -> throw new SqlException(
+            case CREATE   -> parseCreateTable();
+            case INSERT   -> parseInsert();
+            case SELECT   -> parseSelect();
+            case DELETE   -> parseDelete();
+            case UPDATE   -> parseUpdate();
+            case BEGIN    -> { advance(); yield BeginStatement.INSTANCE; }
+            case COMMIT   -> { advance(); yield CommitStatement.INSTANCE; }
+            case ROLLBACK -> { advance(); yield RollbackStatement.INSTANCE; }
+            default       -> throw new SqlException(
                                "Expected a SQL statement (CREATE, INSERT, SELECT, " +
-                               "DELETE, or UPDATE)", t);
+                               "DELETE, UPDATE, BEGIN, COMMIT, or ROLLBACK)", t);
         };
     }
 

@@ -18,4 +18,7 @@ public interface StatementVisitor<T> {
     T visitSelect(SelectStatement stmt)           throws Exception;
     T visitDelete(DeleteStatement stmt)           throws Exception;
     T visitUpdate(UpdateStatement stmt)           throws Exception;
+    T visitBegin   (BeginStatement    stmt)       throws Exception;
+    T visitCommit  (CommitStatement   stmt)       throws Exception;
+    T visitRollback(RollbackStatement stmt)       throws Exception;
 }
