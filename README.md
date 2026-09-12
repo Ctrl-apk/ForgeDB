@@ -10,15 +10,15 @@ ForgeDB implements real database internals: raw disk I/O, page management, buffe
 
 | Milestone | Description | Status |
 |-----------|-------------|--------|
-| M1 | Storage foundation — pages, DiskManager, binary file format | ✅ Complete |
-| M2 | Schema, tuples, heap file, slotted-page layout, sequential scan | ✅ Complete |
-| M3 | Buffer pool — page caching, LRU eviction, pin/unpin protocol | ✅ Complete |
-| M4 | B+ tree index — search, insert, split, delete, range scan | ✅ Complete |
-| M5 | SQL lexer, parser, typed AST | ✅ Complete |
-| M6 | Query execution engine — SELECT / INSERT / UPDATE / DELETE / WHERE | ✅ Complete |
-| M7 | Query planner — index-accelerated lookups, EXPLAIN | ✅ Complete |
-| M8 | Interactive CLI shell, benchmark harness | ✅ Complete |
-| M9 | Transactions (BEGIN/COMMIT/ROLLBACK), WAL, crash recovery | ✅ Complete |
+| M1 | Storage foundation — pages, DiskManager, binary file format |  Complete |
+| M2 | Schema, tuples, heap file, slotted-page layout, sequential scan |  Complete |
+| M3 | Buffer pool — page caching, LRU eviction, pin/unpin protocol |  Complete |
+| M4 | B+ tree index — search, insert, split, delete, range scan |  Complete |
+| M5 | SQL lexer, parser, typed AST |  Complete |
+| M6 | Query execution engine — SELECT / INSERT / UPDATE / DELETE / WHERE |  Complete |
+| M7 | Query planner — index-accelerated lookups, EXPLAIN |  Complete |
+| M8 | Interactive CLI shell, benchmark harness |  Complete |
+| M9 | Transactions (BEGIN/COMMIT/ROLLBACK), WAL, crash recovery |  Complete |
 
 ---
 
